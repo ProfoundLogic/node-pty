@@ -48,4 +48,5 @@ export function open(options: IPtyOpenOptions): ITerminal {
  * Expose the native API when not Windows, note that this is not public API and
  * could be removed at any time.
  */
-export const native = (process.platform !== 'win32' ? require(path.join('..', 'build', 'Release', 'pty.node')) : null);
+const binPath = `${process.platform}-${process.arch}-${process.versions.modules}`;
+export const native = (process.platform !== 'win32' ? require(path.join('..', 'bin', binPath, 'pty.node')) : null);

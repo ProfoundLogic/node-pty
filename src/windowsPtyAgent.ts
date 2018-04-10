@@ -7,7 +7,8 @@ import * as path from 'path';
 import { Socket } from 'net';
 import { ArgvOrCommandLine } from './types';
 
-const pty = require(path.join('..', 'build', 'Release', 'pty.node'));
+const binPath = `${process.platform}-${process.arch}-${process.versions.modules}`;
+const pty = require(path.join('..', 'bin', binPath, 'pty.node'));
 
 /**
  * Agent. Internal class.

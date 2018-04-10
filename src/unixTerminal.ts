@@ -18,7 +18,8 @@ declare interface INativePty {
   pty: string;
 }
 
-const pty = require(path.join('..', 'build', 'Release', 'pty.node'));
+const binPath = `${process.platform}-${process.arch}-${process.versions.modules}`;
+const pty = require(path.join('..', 'bin', binPath, 'pty.node'));
 
 const DEFAULT_FILE = 'sh';
 const DEFAULT_NAME = 'xterm';

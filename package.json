@@ -1,10 +1,10 @@
 {
-  "name": "node-pty",
+  "name": "profoundjs-node-pty",
   "description": "Fork pseudoterminals in Node.JS",
   "author": {
     "name": "Daniel Imms"
   },
-  "version": "0.7.3",
+  "version": "0.0.1",
   "license": "MIT",
   "main": "./lib/index.js",
   "types": "./typings/node-pty.d.ts",
