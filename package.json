@@ -4,7 +4,7 @@
   "author": {
     "name": "Daniel Imms"
   },
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "main": "./lib/index.js",
   "types": "./typings/node-pty.d.ts",
@@ -17,7 +17,8 @@
     "lib/",
     "scripts/",
     "src/",
-    "deps/"
+    "deps/",
+    "bin/"
   ],
   "homepage": "https://github.com/Tyriar/node-pty",
   "bugs": {
