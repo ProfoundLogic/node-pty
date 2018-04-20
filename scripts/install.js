@@ -5,6 +5,9 @@ const os = require('os');
 const path = require('path');
 const spawn = require('child_process').spawn;
 
+if (os.type() == "OS400")
+  process.exit(0);
+
 // Test for pre-built binary.
 var binPath = `${process.platform}-${process.arch}-${process.versions.modules}`;
 try {
