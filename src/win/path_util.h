@@ -6,13 +6,14 @@
 #ifndef NODE_PTY_PATH_UTIL_H_
 #define NODE_PTY_PATH_UTIL_H_
 
-#include <nan.h>
+//#include <uv.h>   //I think the converter added this.
+#include <napi.h>
 
 #define MAX_ENV 65536
 
 namespace path_util {
 
-const wchar_t* to_wstring(const v8::String::Utf8Value& str);
+const wchar_t* to_wstring(Napi::String& str);
 bool file_exists(std::wstring filename);
 std::wstring get_shell_path(std::wstring filename);
 

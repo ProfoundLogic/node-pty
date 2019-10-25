@@ -1,8 +1,26 @@
 {
   'targets': [{
     'target_name': 'pty',
+      'cflags!': [ '-fno-exceptions' ],
+      'cflags_cc!': [ '-fno-exceptions' ],
+      'xcode_settings': { 'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',
+        'CLANG_CXX_LIBRARY': 'libc++',
+        'MACOSX_DEPLOYMENT_TARGET': '10.7',
+      },
+      'msvs_settings': {
+        'VCCLCompilerTool': { 'ExceptionHandling': 1 },
+      },
+      'cflags!': [ '-fno-exceptions' ],
+      'cflags_cc!': [ '-fno-exceptions' ],
+      'xcode_settings': { 'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',
+        'CLANG_CXX_LIBRARY': 'libc++',
+        'MACOSX_DEPLOYMENT_TARGET': '10.7',
+      },
+      'msvs_settings': {
+        'VCCLCompilerTool': { 'ExceptionHandling': 1 },
+      },
     'include_dirs' : [
-      '<!(node -e "require(\'nan\')")'
+      '<!@(node -p "require(\'node-addon-api\').include")',
     ],
     'conditions': [
       ['OS=="win"', {
@@ -14,6 +32,7 @@
         'dependencies' : [
           'deps/winpty/src/winpty.gyp:winpty-agent',
           'deps/winpty/src/winpty.gyp:winpty',
+          "<!(node -p \"require('node-addon-api').gyp\")",
         ],
         'sources' : [
           'src/win/pty.cc',
@@ -41,6 +60,8 @@
         ]
       }],
       ['OS=="mac"', {
+        # The cflags+ option is for node-addon-api 
+        "cflags+":  ["-fvisibility=hidden"],
         "xcode_settings": {
           "OTHER_CPLUSPLUSFLAGS": [
             "-std=c++11",
@@ -49,7 +70,9 @@
           "OTHER_LDFLAGS": [
             "-stdlib=libc++"
           ],
-          "MACOSX_DEPLOYMENT_TARGET":"10.7"
+          "MACOSX_DEPLOYMENT_TARGET":"10.7",
+          # For node-addon-api
+          'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES', # -fvisibility=hidden
         }
       }]
     ]

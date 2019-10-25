@@ -4,7 +4,7 @@
   "author": {
     "name": "Daniel Imms"
   },
-  "version": "1.0.3",
+  "version": "1.0.4",
   "license": "MIT",
   "main": "./lib/index.js",
   "types": "./typings/node-pty.d.ts",
@@ -38,16 +38,16 @@
     "install": "node scripts/install.js",
     "postinstall": "node scripts/post-install.js",
     "test": "cross-env NODE_ENV=test mocha -R spec --exit lib/*.test.js",
-    "prepublish": "npm run tsc"
+    "prepare": "npm run tsc"
   },
   "dependencies": {
-    "nan": "^2.6.2"
+    "node-addon-api": "1.7.1"
   },
   "os": [
-  "!aix"
+    "!aix"
   ],
   "cpu": [
-  "!ppc64"
+    "!ppc64"
   ],
   "devDependencies": {
     "@types/mocha": "^5.0.0",

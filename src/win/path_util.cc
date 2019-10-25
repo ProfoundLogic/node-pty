@@ -3,7 +3,6 @@
  * Copyright (c) 2016, Daniel Imms (MIT License).
  */
 
-#include <nan.h>
 #include <Shlwapi.h> // PathCombine
 #include <winpty.h>
 
@@ -11,8 +10,9 @@
 
 namespace path_util {
 
-const wchar_t* to_wstring(const v8::String::Utf8Value& str) {
-  const char *bytes = *str;
+const wchar_t* to_wstring(Napi::String& str) {
+  std::string str2 = str.Utf8Value();
+  const char * bytes = str2.c_str();
   unsigned int sizeOfStr = MultiByteToWideChar(CP_UTF8, 0, bytes, -1, NULL, 0);
   wchar_t *output = new wchar_t[sizeOfStr];
   MultiByteToWideChar(CP_UTF8, 0, bytes, -1, output, sizeOfStr);

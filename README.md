@@ -1,3 +1,16 @@
+profoundjs-node-pty Version 1.0.4 uses N-API binaries for forward compatibility on Node versions 10 and later for these platforms:
+* Darwin (Mac OS), Intel 64-bit
+* Linux, Intel/AMD 64-bit
+* Linux, POWER 64-bit
+* Windows, Intel/AMD 64-bit
+
+profoundjs-node-pty will use the pre-built binaries on Node 8 and 9 for these platforms:
+* Darwin (Mac OS), Intel 64-bit
+* Linux, Intel/AMD 64-bit
+* Linux, POWER 64-bit
+* Windows, Intel/AMD 32-bit
+* Windows, Intel/AMD 64-bit
+
 # node-pty
 
 [![Travis CI build status](https://travis-ci.org/Tyriar/node-pty.svg?branch=master)](https://travis-ci.org/Tyriar/node-pty)

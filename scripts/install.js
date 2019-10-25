@@ -5,11 +5,17 @@ const os = require('os');
 const path = require('path');
 const spawn = require('child_process').spawn;
 
+// IBM i uses a different module.
 if (os.type() == "OS400")
   process.exit(0);
 
 // Test for pre-built binary.
-var binPath = `${process.platform}-${process.arch}-${process.versions.modules}`;
+const NODE_MODULE_VERSION = parseInt(process.versions.modules, 10);
+var binPath = `${process.platform}-${process.arch}`;  //N-API Binaries for Node versions 10 and later are in folders like win32-x64/
+if (NODE_MODULE_VERSION < 64 || ['darwin-x64','linux-ppc64','linux-x64','win32-x64'].indexOf(binPath) < 0 ){
+  binPath += `-${process.versions.modules}`;    //NAN Binaries for Node versions before 10 are in folders like win32-x64-57/.
+}
+
 try {
   
   fs.statSync(path.join(__dirname, '..', 'bin', binPath, 'pty.node'));

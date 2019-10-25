@@ -12,6 +12,8 @@
     "electron": "1.8.4"
   },
   "dependencies": {
+    "node-addon-api": "1.7.1",
+    "node-addon-api": "1.7.1",
     "node-pty": "^0.7.4",
     "xterm": "^3.0.2"
   }
