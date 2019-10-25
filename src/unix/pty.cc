@@ -17,8 +17,7 @@
  * Includes
  */
 
-//#include <napi.h>
-#include <uv.h>
+#include <napi.h>
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>

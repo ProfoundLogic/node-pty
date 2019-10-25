@@ -6,7 +6,6 @@
 #ifndef NODE_PTY_PATH_UTIL_H_
 #define NODE_PTY_PATH_UTIL_H_
 
-//#include <uv.h>   //I think the converter added this.
 #include <napi.h>
 
 #define MAX_ENV 65536
