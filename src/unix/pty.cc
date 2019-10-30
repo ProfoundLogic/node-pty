@@ -11,6 +11,7 @@
  *   man tty_ioctl
  *   man termios
  *   man forkpty
+ *
  */
 
 /**
@@ -22,6 +23,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -34,15 +36,9 @@
 #if defined(__GLIBC__) || defined(__CYGWIN__)
 #include <pty.h>
 #elif defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
-/**
- * From node v0.10.28 (at least?) there is also a "util.h" in node/src, which
- * would confuse the compiler when looking for "util.h".
- */
-#if NODE_VERSION_AT_LEAST(0, 10, 28)
+
 #include <../include/util.h>
-#else
-#include <util.h>
-#endif
+
 #elif defined(__FreeBSD__)
 #include <libutil.h>
 #elif defined(__sun)
@@ -72,16 +68,70 @@ extern char **environ;
 #endif
 
 /**
- * Structs
+ * Classes
+ * This class allows another thread to wait for the exit code and then run the "onexit" callback in JavaScript.
  */
+class MyWorker : public Napi::AsyncWorker {
+  public:
+    MyWorker(Napi::Function& callback, pid_t& pid) : Napi::AsyncWorker(callback), pid(pid) {}
 
-struct pty_baton {
-  Napi::FunctionReference cb;
-  int exit_code;
-  int signal_code;
-  pid_t pid;
-  uv_async_t async;
-  uv_thread_t tid;
+    // Once the OnOk or OnError methods are complete, the instance is destructed. The instance deletes itself using the delete operator.
+    ~MyWorker() {}
+
+    // Code to be executed on the worker thread. (replaces pty_waitpid)
+    // When this returns, the OnOk or OnError functions are called, running on the main thread.
+    void Execute() {
+      my_waitpid();
+
+      if (WIFEXITED(stat_loc)) {
+        exit_code = WEXITSTATUS(stat_loc); // errno?
+      }
+
+      if (WIFSIGNALED(stat_loc)) {
+        signal_code = WTERMSIG(stat_loc);
+      }
+    }
+
+    void my_waitpid() {
+      int ret;
+      errno = 0;
+
+      if ((ret = waitpid(pid, &stat_loc, 0)) != pid) {
+        if (ret == -1 && errno == EINTR) {
+          return my_waitpid();
+        }
+        if (ret == -1 && errno == ECHILD) {
+          // XXX node v0.8.x seems to have this problem.
+          // waitpid is already handled elsewhere.
+          ;
+        }
+        else {
+          assert(false);
+        }
+      }
+    }
+
+    // After the Execute method is done, OnOk is called as part of the event loop,
+    // causing JavaScript to invoke the callback. (replaces pty_after_waitpid).
+    void OnOk() {
+      Napi::Env env = Napi::AsyncWorker::Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> argv;
+      std::vector<napi_value>::iterator iter;
+      iter = argv.begin();
+      iter = argv.insert(iter, Napi::Number::New(env, exit_code));
+      iter = argv.insert(iter, Napi::Number::New(env, signal_code));
+      Callback().Call(argv);
+    }
+
+  private:
+    pid_t pid;
+
+    int stat_loc;
+
+    int exit_code;
+    int signal_code;
 };
 
 /**
@@ -104,39 +154,22 @@ Napi::Value PtyKill(const Napi::CallbackInfo& info);
  * Functions
  */
 
-static int
-pty_execvpe(const char *, char **, char **);
+static int pty_execvpe(const char *, char **, char **);
 
-static int
-pty_nonblock(int);
+static int pty_nonblock(int);
 
-static char *
-pty_getproc(int, char *);
+static char * pty_getproc(int, char *);
 
-static int
-pty_openpty(int *, int *, char *,
+static int pty_openpty(int *, int *, char *,
             const struct termios *,
             const struct winsize *);
 
-static pid_t
-pty_forkpty(int *, char *,
+static pid_t pty_forkpty(int *, char *,
             const struct termios *,
             const struct winsize *);
-
-static void
-pty_waitpid(void *);
-
-static void
-#if NODE_VERSION_AT_LEAST(0, 11, 0)
-pty_after_waitpid(uv_async_t *);
-#else
-pty_after_waitpid(uv_async_t *, int);
-#endif
-
-static void
-pty_after_close(uv_handle_t *);
 
 Napi::Value PtyFork(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   if (info.Length() != 10 ||
@@ -150,8 +183,9 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
       !info[7].IsNumber() ||
       !info[8].IsBoolean() ||
       !info[9].IsFunction()) {
-    return Napi::ThrowError(
-        "Usage: pty.fork(file, args, env, cwd, cols, rows, uid, gid, utf8, onexit)");
+
+    Napi::Error::New(env, "Usage: pty.fork(file, args, env, cwd, cols, rows, uid, gid, utf8, onexit)").ThrowAsJavaScriptException();
+    return env.Null();
   }
 
   // Make sure the process still listens to SIGINT
@@ -163,30 +197,30 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
   // args
   int i = 0;
   Napi::Array argv_ = info[1].As<Napi::Array>();
-  int argc = argv_->Length();
+  int argc = argv_.Length();
   int argl = argc + 1 + 1;
   char **argv = new char*[argl];
-  argv[0] = strdup(*file);
+  argv[0] = strdup( file.Utf8Value().c_str() );
   argv[argl-1] = NULL;
   for (; i < argc; i++) {
-    Napi::String arg(env, argv_->Get(Napi::Number::New(env, i))->ToString());
-    argv[i+1] = strdup(*arg);
+    Napi::String arg(env, argv_.Get(Napi::Number::New(env, i)).ToString());
+    argv[i + 1] = strdup(arg.Utf8Value().c_str());
   }
 
-  // env
+  // env - argument for environ, for execvpe
   i = 0;
   Napi::Array env_ = info[2].As<Napi::Array>();
-  int envc = env_->Length();
-  char **env = new char*[envc+1];
-  env[envc] = NULL;
+  int envc = env_.Length();
+  char **envarg = new char*[envc+1];
+  envarg[envc] = NULL;
   for (; i < envc; i++) {
-    Napi::String pair(env, env_->Get(Napi::Number::New(env, i))->ToString());
-    env[i] = strdup(*pair);
+    Napi::String pair(env, env_.Get(Napi::Number::New(env, i)).ToString());
+    envarg[i] = strdup(pair.Utf8Value().c_str());
   }
 
   // cwd
   Napi::String cwd_(env, info[3].ToString());
-  char *cwd = strdup(*cwd_);
+  char* cwd = strdup( cwd_.Utf8Value().c_str());
 
   // size
   struct winsize winp;
@@ -199,7 +233,7 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
   struct termios t = termios();
   struct termios *term = &t;
   term->c_iflag = ICRNL | IXON | IXANY | IMAXBEL | BRKINT;
-  if (info[8].ToBoolean()->Value()) {
+  if (info[8].ToBoolean().Value()) {
 #if defined(IUTF8)
     term->c_iflag |= IUTF8;
 #endif
@@ -244,8 +278,8 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
   if (pid) {
     for (i = 0; i < argl; i++) free(argv[i]);
     delete[] argv;
-    for (i = 0; i < envc; i++) free(env[i]);
-    delete[] env;
+    for (i = 0; i < envc; i++) free(envarg[i]);
+    delete[] envarg;
     free(cwd);
   }
 
@@ -272,7 +306,7 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
         }
       }
 
-      pty_execvpe(argv[0], argv, env);
+      pty_execvpe(argv[0], argv, envarg);
 
       perror("execvp(3) failed.");
       _exit(1);
@@ -283,31 +317,23 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
       }
 
       Napi::Object obj = Napi::Object::New(env);
-      (obj).Set(Napi::String::New(env, "fd"),
-        Napi::Number::New(env, master));
-      (obj).Set(Napi::String::New(env, "pid"),
-        Napi::Number::New(env, pid));
-      (obj).Set(Napi::String::New(env, "pty"),
-        Napi::String::New(env, ptsname(master)));
+      (obj).Set(Napi::String::New(env, "fd"), Napi::Number::New(env, master));
+      (obj).Set(Napi::String::New(env, "pid"), Napi::Number::New(env, pid));
+      (obj).Set(Napi::String::New(env, "pty"), Napi::String::New(env, ptsname(master)));
 
-      pty_baton *baton = new pty_baton();
-      baton->exit_code = 0;
-      baton->signal_code = 0;
-      baton->cb.Reset(info[9].As<Napi::Function>());
-      baton->pid = pid;
-      baton->async.data = baton;
+      // Create new MyWorker and queue it. Assign the callback from the arguments.
+      Napi::Function cb = info[9].As<Napi::Function>();
+      MyWorker* worker = new MyWorker(cb, pid );
+      worker->Queue();
 
-      uv_async_init(uv_default_loop(), &baton->async, pty_after_waitpid);
-
-      uv_thread_create(&baton->tid, pty_waitpid, static_cast<void*>(baton));
-
-      return return obj;
+      return obj;
   }
 
-  return return env.Undefined();
+  return env.Undefined();
 }
 
 Napi::Value PtyOpen(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   if (info.Length() != 2 ||
@@ -344,43 +370,43 @@ Napi::Value PtyOpen(const Napi::CallbackInfo& info) {
   }
 
   Napi::Object obj = Napi::Object::New(env);
-  (obj).Set(Napi::String::New(env, "master"),
-    Napi::Number::New(env, master));
-  (obj).Set(Napi::String::New(env, "slave"),
-    Napi::Number::New(env, slave));
-  (obj).Set(Napi::String::New(env, "pty"),
-    Napi::String::New(env, ptsname(master)));
+  (obj).Set(Napi::String::New(env, "master"), Napi::Number::New(env, master));
+  (obj).Set(Napi::String::New(env, "slave"), Napi::Number::New(env, slave));
+  (obj).Set(Napi::String::New(env, "pty"), Napi::String::New(env, ptsname(master)));
 
-  return return obj;
+  return obj;
 }
 
 #ifdef DEFINE_PTY_KILL
 Napi::Value PtyKill(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   if (info.Length() != 2 ||
-      !info[0].IsNumber() ||
-      !info[1].IsNumber()) {
+    !info[0].IsNumber() ||
+    !info[1].IsNumber()) {
     Napi::Error::New(env, "Usage: pty.kill(fd, signal)").ThrowAsJavaScriptException();
-    return env.Null();
   }
+  else {
+    int fd = info[0].As<Napi::Number>().Int64Value();
+    int signal = info[1].As<Napi::Number>().Int64Value();
 
-  int fd = info[0].As<Napi::Number>().Int64Value();
-  int signal = info[1].As<Napi::Number>().Int64Value();
-
-#if defined(TIOCSIG)
-  if (ioctl(fd, TIOCSIG, signal) == -1)
-    Napi::Error::New(env, "ioctl(2) failed.").ThrowAsJavaScriptException();
-    return env.Null();
-#elif defined(TIOCSIGNAL)
-  if (ioctl(fd, TIOCSIGNAL, signal) == -1)
-    Napi::Error::New(env, "ioctl(2) failed.").ThrowAsJavaScriptException();
-    return env.Null();
-#endif
+  #if defined(TIOCSIG)
+    if (ioctl(fd, TIOCSIG, signal) == -1) {
+      Napi::Error::New(env, "ioctl(2) failed.").ThrowAsJavaScriptException();
+    }
+  #elif defined(TIOCSIGNAL)
+    if (ioctl(fd, TIOCSIGNAL, signal) == -1) {
+      Napi::Error::New(env, "ioctl(2) failed.").ThrowAsJavaScriptException();
+    }
+  #endif
+  }
+  return env.Null();
 }
 #endif
 
 Napi::Value PtyResize(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   if (info.Length() != 3 ||
@@ -404,13 +430,14 @@ Napi::Value PtyResize(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  return return env.Undefined();
+  return env.Undefined();
 }
 
 /**
  * Foreground Process Name
  */
 Napi::Value PtyGetProc(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   if (info.Length() != 2 ||
@@ -423,17 +450,17 @@ Napi::Value PtyGetProc(const Napi::CallbackInfo& info) {
   int fd = info[0].As<Napi::Number>().Int64Value();
 
   Napi::String tty_(env, info[1].ToString());
-  char *tty = strdup(*tty_);
+  char* tty = strdup(tty_.Utf8Value().c_str());
   char *name = pty_getproc(fd, tty);
   free(tty);
 
   if (name == NULL) {
-    return return env.Undefined();
+    return env.Undefined();
   }
 
   Napi::String name_ = Napi::String::New(env, name);
   free(name);
-  return return name_;
+  return name_;
 }
 
 /**
@@ -442,8 +469,7 @@ Napi::Value PtyGetProc(const Napi::CallbackInfo& info) {
 
 // execvpe(3) is not portable.
 // http://www.gnu.org/software/gnulib/manual/html_node/execvpe.html
-static int
-pty_execvpe(const char *file, char **argv, char **envp) {
+static int pty_execvpe(const char *file, char **argv, char **envp) {
   char **old = environ;
   environ = envp;
   int ret = execvp(file, argv);
@@ -455,88 +481,10 @@ pty_execvpe(const char *file, char **argv, char **envp) {
  * Nonblocking FD
  */
 
-static int
-pty_nonblock(int fd) {
+static int pty_nonblock(int fd) {
   int flags = fcntl(fd, F_GETFL, 0);
   if (flags == -1) return -1;
   return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
-
-/**
- * pty_waitpid
- * Wait for SIGCHLD to read exit status.
- */
-
-static void
-pty_waitpid(void *data) {
-  int ret;
-  int stat_loc;
-
-  pty_baton *baton = static_cast<pty_baton*>(data);
-
-  errno = 0;
-
-  if ((ret = waitpid(baton->pid, &stat_loc, 0)) != baton->pid) {
-    if (ret == -1 && errno == EINTR) {
-      return pty_waitpid(baton);
-    }
-    if (ret == -1 && errno == ECHILD) {
-      // XXX node v0.8.x seems to have this problem.
-      // waitpid is already handled elsewhere.
-      ;
-    } else {
-      assert(false);
-    }
-  }
-
-  if (WIFEXITED(stat_loc)) {
-    baton->exit_code = WEXITSTATUS(stat_loc); // errno?
-  }
-
-  if (WIFSIGNALED(stat_loc)) {
-    baton->signal_code = WTERMSIG(stat_loc);
-  }
-
-  uv_async_send(&baton->async);
-}
-
-/**
- * pty_after_waitpid
- * Callback after exit status has been read.
- */
-
-static void
-#if NODE_VERSION_AT_LEAST(0, 11, 0)
-pty_after_waitpid(uv_async_t *async) {
-#else
-pty_after_waitpid(uv_async_t *async, int unhelpful) {
-#endif
-  Napi::HandleScope scope(env);
-  pty_baton *baton = static_cast<pty_baton*>(async->data);
-
-  Napi::Value argv[] = {
-    Napi::Number::New(env, baton->exit_code),
-    Napi::Number::New(env, baton->signal_code),
-  };
-
-  Napi::Function cb = Napi::Function::New(env, baton->cb);
-  baton->cb.Reset();
-  memset(&baton->cb, -1, sizeof(baton->cb));
-  Napi::FunctionReference(cb).Call(Napi::GetCurrentContext()->Global(), 2, argv);
-
-  uv_close((uv_handle_t *)async, pty_after_close);
-}
-
-/**
- * pty_after_close
- * uv_close() callback - free handle data
- */
-
-static void
-pty_after_close(uv_handle_t *handle) {
-  uv_async_t *async = (uv_async_t *)handle;
-  pty_baton *baton = static_cast<pty_baton*>(async->data);
-  delete baton;
 }
 
 /**
@@ -736,18 +684,14 @@ pty_forkpty(int *amaster,
 
 Napi::Object init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);
-  (target).Set(Napi::String::New(env, "fork"),
-           Napi::Function::New(env, PtyFork));
-  (target).Set(Napi::String::New(env, "open"),
-           Napi::Function::New(env, PtyOpen));
+  exports.Set(Napi::String::New(env, "fork"), Napi::Function::New(env, PtyFork));
+  exports.Set(Napi::String::New(env, "open"), Napi::Function::New(env, PtyOpen));
 #ifdef DEFINE_PTY_KILL
-  (target).Set(Napi::String::New(env, "kill"),
-           Napi::Function::New(env, PtyKill));
+  exports.Set(Napi::String::New(env, "kill"), Napi::Function::New(env, PtyKill));
 #endif
-  (target).Set(Napi::String::New(env, "resize"),
-           Napi::Function::New(env, PtyResize));
-  (target).Set(Napi::String::New(env, "process"),
-           Napi::Function::New(env, PtyGetProc));
+  exports.Set(Napi::String::New(env, "resize"), Napi::Function::New(env, PtyResize));
+  exports.Set(Napi::String::New(env, "process"), Napi::Function::New(env, PtyGetProc));
+  return exports;
 }
 
 NODE_API_MODULE(pty, init)
