@@ -43,12 +43,6 @@
   "dependencies": {
     "node-addon-api": "1.7.1"
   },
-  "os": [
-    "!aix"
-  ],
-  "cpu": [
-    "!ppc64"
-  ],
   "devDependencies": {
     "@types/mocha": "^5.0.0",
     "@types/node": "^6.0.104",
