@@ -1,6 +1,10 @@
 /**
  * Copyright (c) 2012-2015, Christopher Jeffrey (MIT License)
  * Copyright (c) 2016, Daniel Imms (MIT License).
+ *
+ * net.Socket replaced with tty.ReadStream fixes same thing as this:
+ * https://github.com/chjj/pty.js/issues/32
+ *
  */
 
 import * as net from 'net';
@@ -290,14 +294,18 @@ export class UnixTerminal extends Terminal {
  * Wraps net.Socket to force the handle type "PIPE" by temporarily overwriting
  * tty_wrap.guessHandleType.
  * See: https://github.com/chjj/pty.js/issues/103
+ *
+ * net.Socket replaced with tty.ReadStream fixes the same thing as this: https://github.com/chjj/pty.js/issues/32
  */
-class PipeSocket extends net.Socket {
+//class PipeSocket extends net.Socket {
+class PipeSocket extends tty.ReadStream {
   constructor(fd: number) {
     const tty = (<any>process).binding('tty_wrap');
     const guessHandleType = tty.guessHandleType;
     tty.guessHandleType = () => 'PIPE';
     // @types/node has fd as string? https://github.com/DefinitelyTyped/DefinitelyTyped/pull/18275
-    super({ fd: <any>fd });
+    //super({ fd: <any>fd });
+    super( <any>fd ); //Fix for https://github.com/nodejs/node/issues/28590
     tty.guessHandleType = guessHandleType;
   }
 }
