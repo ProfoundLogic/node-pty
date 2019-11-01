@@ -26,6 +26,7 @@ if (process.platform !== 'win32') {
         if (regExp) {
           assert.ok(regExp.test((<any>term)._pty), '"' + (<any>term)._pty + '" should match ' + regExp.toString());
         }
+        term.kill();  //Make sure one forked pty isn't still doing waitpid.
       });
     });
 
@@ -102,6 +103,16 @@ if (process.platform !== 'win32') {
         term.slave.write('slave\n');
         term.master.write('master\n');
       });
+
+      it('onexit fires', (done) => {
+        const term = new UnixTerminal('/bin/bash', [ '-c', `cat "${FIXTURES_PATH}"` ], {
+          encoding: null,
+        });
+        term.on('exit', () => {
+          done();
+        });
+      });
+
     });
   });
 }

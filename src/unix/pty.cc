@@ -70,6 +70,7 @@ extern char **environ;
 /**
  * Classes
  * This class allows another thread to wait for the exit code and then run the "onexit" callback in JavaScript.
+ * Its destructor is automatically called when the class is no longer needed.
  */
 class MyWorker : public Napi::AsyncWorker {
   public:
@@ -110,29 +111,27 @@ class MyWorker : public Napi::AsyncWorker {
         }
       }
     }
-
-    // After the Execute method is done, OnOk is called as part of the event loop,
+    
+    // After the Execute method is done, the parent class's OnOk is called as part of the event loop,
     // causing JavaScript to invoke the callback. (replaces pty_after_waitpid).
-    void OnOk() {
-      Napi::Env env = Napi::AsyncWorker::Env();
+    // GetResult provides arguments to the callback, 
+    virtual std::vector<napi_value> GetResult(Napi::Env env) {
       Napi::HandleScope scope(env);
-
       std::vector<napi_value> argv;
       std::vector<napi_value>::iterator iter;
       iter = argv.begin();
       iter = argv.insert(iter, Napi::Number::New(env, exit_code));
       iter = argv.insert(iter, Napi::Number::New(env, signal_code));
-      Callback().Call(argv);
+      return argv;
     }
 
   private:
     pid_t pid;
-
     int stat_loc;
-
     int exit_code;
     int signal_code;
 };
+
 
 /**
  * Methods
@@ -321,10 +320,10 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
       (obj).Set(Napi::String::New(env, "pid"), Napi::Number::New(env, pid));
       (obj).Set(Napi::String::New(env, "pty"), Napi::String::New(env, ptsname(master)));
 
-      // Create new MyWorker and queue it. Assign the callback from the arguments.
+      // Create new MyWorker and queue it. Assign the callback from the arguments. The instance's memory is freed automatically.
       Napi::Function cb = info[9].As<Napi::Function>();
-      MyWorker* worker = new MyWorker(cb, pid );
-      worker->Queue();
+      MyWorker* backgroundWorker = new MyWorker(cb, pid);
+      backgroundWorker->Queue();
 
       return obj;
   }
