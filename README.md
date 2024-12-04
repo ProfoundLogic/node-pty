@@ -1,9 +1,11 @@
 profoundjs-node-pty provides prebuilt N-API binaries for forward compatibility on Node versions 10 and later for these platforms:
-* Darwin (Mac OS), Intel 64-bit
-* Linux, Intel/AMD 64-bit
-* Linux, POWER 64-bit
-* Windows, Intel/AMD 32-bit
-* Windows, Intel/AMD 64-bit
+
+- Darwin (Mac OS), ARM 64-bit
+- Darwin (Mac OS), Intel 64-bit
+- Linux, Intel/AMD 64-bit
+- Linux, POWER 64-bit
+- Windows, Intel/AMD 32-bit
+- Windows, Intel/AMD 64-bit
 
 # node-pty
 
@@ -14,7 +16,7 @@ profoundjs-node-pty provides prebuilt N-API binaries for forward compatibility o
 This is useful for:
 
 - Writing a terminal emulator (eg. via [xterm.js](https://github.com/sourcelair/xterm.js)).
-- Getting certain programs to *think* you're a terminal, such as when you need a program to send you control sequences.
+- Getting certain programs to _think_ you're a terminal, such as when you need a program to send you control sequences.
 
 `node-pty` supports Linux, macOS and Windows. Windows support is possible by utilizing the [Windows conpty API](https://blogs.msdn.microsoft.com/commandline/2018/08/02/windows-command-line-introducing-the-windows-pseudo-console-conpty/) on Windows 1809+ and the [winpty](https://github.com/rprichard/winpty) library in older version.
 
@@ -25,26 +27,26 @@ The full API for node-pty is contained within the [TypeScript declaration file](
 ## Example Usage
 
 ```js
-var os = require('os');
-var pty = require('node-pty');
+var os = require("os");
+var pty = require("node-pty");
 
-var shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+var shell = os.platform() === "win32" ? "powershell.exe" : "bash";
 
 var ptyProcess = pty.spawn(shell, [], {
-  name: 'xterm-color',
+  name: "xterm-color",
   cols: 80,
   rows: 30,
   cwd: process.env.HOME,
-  env: process.env
+  env: process.env,
 });
 
-ptyProcess.on('data', function(data) {
+ptyProcess.on("data", function (data) {
   process.stdout.write(data);
 });
 
-ptyProcess.write('ls\r');
+ptyProcess.write("ls\r");
 ptyProcess.resize(100, 40);
-ptyProcess.write('ls\r');
+ptyProcess.write("ls\r");
 ```
 
 ## Real-world Uses
@@ -147,7 +149,7 @@ By default `PAUSE` and `RESUME` are XON/XOFF control codes (as shown above). To 
 
 ### Powershell gives error 8009001d
 
-> Internal Windows PowerShell error.  Loading managed Windows PowerShell failed with error 8009001d.
+> Internal Windows PowerShell error. Loading managed Windows PowerShell failed with error 8009001d.
 
 This happens when PowerShell is launched with no `SystemRoot` environment variable present.
 
